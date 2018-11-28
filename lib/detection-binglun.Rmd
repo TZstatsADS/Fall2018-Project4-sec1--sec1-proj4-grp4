@@ -1,0 +1,70 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(e1071)
+setwd("/Users/zhaobinglun/Documents/GitHub/Fall2018-Project4-sec1--sec1-proj4-grp4/data/ground_truth")
+groud_truth_dir <-"/Users/zhaobinglun/Documents/GitHub/Fall2018-Project4-sec1--sec1-proj4-grp4/data/ground_truth"
+tesseract_dir <-"/Users/zhaobinglun/Documents/GitHub/Fall2018-Project4-sec1--sec1-proj4-grp4/data/tesseract"
+gt_file_name <- list.files(groud_truth_dir)
+gt_file_path <- paste0(groud_truth_dir,'/',gt_file_name)
+
+get_text <- function(file_path) {
+  text_lines <- readLines(file_path, warn=FALSE)
+  text_oneline <- paste0(text_lines, collapse = " ")
+  text_word <- unlist(strsplit(text_oneline," "))
+  return(text_word)
+}
+a<- lapply(gt_file_path,get_text)
+Dictionary1 <- unlist(a)
+```
+
+
+
+```{r}
+ta_file_name <- list.files(tesseract_dir)
+ta_file_path <- paste0(tesseract_dir,'/',ta_file_name)
+b <- lapply(ta_file_path,get_text)
+Dictionary2 <- unlist(b)
+```
+
+#compare
+
+```{r}
+search_tokens <- function(word,dictionary) {
+  if(word%in%dictionary) {
+    return(1)
+  } else {
+    return(0)
+  }
+}
+c<-lapply(Dictionary1,search_tokens,Dictionary2)
+head(c,100)
+save(c,file="/Users/zhaobinglun/Documents/GitHub/Fall2018-Project4-sec1--sec1-proj4-grp4/output/lable.Rdata")
+```
+
+#Feature extraction
+
+```{r}
+
+
+
+
+
+
+
+
+
+
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).

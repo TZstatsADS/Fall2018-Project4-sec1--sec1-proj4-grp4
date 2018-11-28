@@ -53,19 +53,38 @@ library(tokenizers)
 #gt_token<- tokenize_words(char_vector_gt)
 #char_vector_tr <- readLines("D:/ADS_Proj4_Grp4/data/tesseract/group1_00000049.txt")
 #tr_token<- tokenize_words(char_vector_tr)
-gt_token <- tokenize_words(truth_all)
-tr_token <- tokenize_words(tess_all)
+#gt_token <- tokenize_words(truth_all)
+gt_token2<- strsplit(truth_all,' ')
+#tr_token <- tokenize_words(tess_all)
+tr_token2<- strsplit(tess_all,' ')
+
+#i <- 0
+#k <- 0
+#gt_right_token <- list()
+#tr_right_token <- list()
+#for (n in 1:length(gt_token2)){
+#  if (length(gt_token2[[n]]) == length(tr_token2[[n]])) {
+#    
+#    i = i + 1
+#    gt_right_token[[i]] <- sapply(gt_token2[[n]],tolower)
+#    tr_right_token[[i]] <- sapply(tr_token2[[n]],tolower)
+#  } else{
+#    k = k+1
+#  }
+#}
+#print(i)
+#print(k)
 
 i <- 0
 k <- 0
 gt_right_token <- list()
 tr_right_token <- list()
-for (n in 1:length(gt_token)){
-  if (length(gt_token[[n]]) == length(tr_token[[n]])) {
+for (n in 1:length(gt_token2)){
+  if (length(gt_token2[[n]]) == length(tr_token2[[n]])) {
     
     i = i + 1
-    gt_right_token[[i]] <- gt_token[[n]]
-    tr_right_token[[i]] <- tr_token[[n]]
+    gt_right_token[[i]] <- sapply(sapply(gt_token2[[n]], tolower),removePunctuation)
+    tr_right_token[[i]] <- sapply(sapply(tr_token2[[n]], tolower),removePunctuation)
   } else{
     k = k+1
   }

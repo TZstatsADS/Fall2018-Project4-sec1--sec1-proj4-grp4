@@ -11,53 +11,8 @@ output:
     code_folding: hide
 ---
 
-Jing Wu
-
-GU4243/GR5243: Applied Data Science
-
-<style type="text/css">
-h1.title {
-  font-size: 24px;
-  color: Black;
-}
-h1 { /* Header 1 */
-  font-size: 24px;
-  color: Black;
-}
-h2 { /* Header 2 */
-  font-size: 20px;
-  color: Black;
-}
-h3 { /* Header 3 */
-  font-size: 16px;
-  color: Black;
-}
-h4 { /* Header 4 */
-  font-size: 14px;
-  color: Grey;
-}
-</style>
-# Introduction {-}
-
-Optical character recognition (OCR) is the process of converting scanned images of machine printed or
-handwritten text (numerals, letters, and symbols), into machine readable character streams, plain (e.g. text files) or formatted (e.g. HTML files). As shown in Figure 1, the data *workflow* in a typical OCR system consists of three major stages:
-
-* Pre-processing
-
-* OCR character recognition
-
-* Post-processing
-
-![](../figs/ocr_flowchart.png) 
-
-We have processed raw scanned images through the first two steps are relying on the [Tessearct OCR machine](https://en.wikipedia.org/wiki/Tesseract_(software)). R package tutorial can be found [here](https://www.r-bloggers.com/the-new-tesseract-package-high-quality-ocr-in-r/). 
-
-BUT this is not the FOCUS of this project!!!
-
-In this project, we are going to **focus on the third stage -- post-processing**, which includes two tasks: *error detection* and *error correction*.  
-
 # Step 1 - Load library and source code
-```{r, warning=FALSE, message = FALSE}
+```{r,warning=FALSE, message = FALSE}
 if (!require("devtools")) install.packages("devtools")
 if (!require("pacman")) {
   ## devtools is required
@@ -65,92 +20,565 @@ if (!require("pacman")) {
   install_github("trinker/pacman")
 }
 
-pacman::p_load(knitr, readr, stringr, tesseract, vecsets)
-source('../lib/ifCleanToken.R')
-file_name_vec <- list.files("../data/ground_truth") #100 files in total
+pacman::p_load(knitr, readr, stringr, tesseract, vecsets, e1071, reshape2, tm, topicmodels, dplyr, tidytext, hash, openxlsx, tokenizers)
+#source('../lib/ifCleanToken.R')
+#file_name_vec <- list.files("../data/ground_truth") #100 files in total
+```
+
+```{r setup, include=FALSE,cache=FALSE}
+knitr::opts_knit$set(root.dir = "~/Desktop/5243/Fall2018-Project4-sec1--sec1-proj4-grp4/doc")
+groud_truth_dir <-"../data/ground_truth"
+tesseract_dir <-"../data/tesseract"
+```
+
+```{r}
+getwd()
+source('../lib/bigramize.R')
+source('../lib/feat_label.R')
+source('../lib/get_text.R')
 ```
 
 # Step 2 - read the files and conduct Tesseract OCR
 
-Although we have processed the Tesseract OCR and save the output txt files in the `data` folder, we include this chunk of code in order to make clear the whole pipeline to you.
+```{r}
+### contruct the ground truth dictionary
+gt_dir <-"../data/ground_truth"
+gt_file_name <- list.files(gt_dir)
+gt_file_path <- paste0(gt_dir,'/',gt_file_name)
+gt_words <- lapply(gt_file_path,get_text)
+gt_dictionary <- unlist(gt_words)
 
-```{r, eval=FALSE}
-for(i in c(1:length(file_name_vec))){
-  current_file_name <- sub(".txt","",file_name_vec[i])
-  ## png folder is not provided on github (the code is only on demonstration purpose)
-  current_tesseract_txt <- tesseract::ocr(paste("../data/png/",current_file_name,".png",sep=""))
-  
-  ### clean the tessetact text (separate line by "\n", delete null string, transter to lower case)
-  clean_tesseract_txt <- strsplit(current_tesseract_txt,"\n")[[1]]
-  clean_tesseract_txt <- clean_tesseract_txt[clean_tesseract_txt!=""]
-  
-  ### save tesseract text file
-  writeLines(clean_tesseract_txt, paste("../data/tesseract/",current_file_name,".txt",sep=""))
-}
+### contruct the tesseract dictionary
+ta_dir <-"../data/tesseract"
+ta_file_name <- list.files(ta_dir)
+ta_file_path <- paste0(ta_dir,'/',ta_file_name)
+ta_words <- lapply(ta_file_path,get_text)
+ta_dictionary <- unlist(ta_words)
 ```
 
 # Step 3 - Error detection
 
 Now, we are ready to conduct post-processing, based on the Tessearct OCR output. First of all, we need to detect errors, or *incorrectly processed words* -- check to see if an input string is a valid dictionary word or if its n-grams are all legal.
 
-The referenced papers are:
-
-1. [Rule-based techniques](http://webpages.ursinus.edu/akontostathis/KulpKontostathisFinal.pdf)
-
-- rules are in the section 2.2 
-
-2. [Letter n-gram](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1672564)
-
-- focus on positional binary digram in section 3-a.error detection
-
-3. Probabilistic techniques -- [SVM garbage detection](https://dl.acm.org/citation.cfm?doid=2034617.2034626)
-
-- features are in section 5 (you can choose not to implement ‘Levenshtein distance’ feature)
-
-
-In this statercode, we implement the first three rules in the first paper -- rule based techniques, as an example.
+```{r}
+### generate labels
+### either by these comment-out codes or laoding from the Rdata file
+labels_tm <- NA
+labels_tm <- system.time(ta_labels <- unlist(lapply(ta_dictionary,make_label,gt_dictionary)))
+lab_mat <- cbind(ta_dictionary,ta_labels)
+save(ta_labels,file="../output/ta_labels.Rdata")
+load("../output/ta_labels.Rdata")
+save(lab_mat,file="../output/lab_mat.Rdata")
+load("../output/lab_mat.Rdata")
+```
 
 ```{r}
-### only process one of the files in the folder as an example, in your project, you need to use all the files
-current_file_name <- sub(".txt","",file_name_vec[5])
+### note that only convert the dictionary to lowercase but not remove punctuations or other symbols
 
-## read the ground truth text
-current_ground_truth_txt <- readLines(paste("../data/ground_truth/",current_file_name,".txt",sep=""), warn=FALSE)
+### sort the ground trurh dictionary by letter length
+gt_by_length <- sort_by_length(tolower(gt_dictionary))
 
-## read the tesseract text
-current_tesseract_txt <- readLines(paste("../data/tesseract/",current_file_name,".txt",sep=""), warn=FALSE)
-clean_tesseract_txt <- paste(current_tesseract_txt, collapse = " ")
+### bigramize ground trurh dictionary
+### either by these comment-out codes or laoding from the Rdata file
+num_len <- length(gt_by_length)
+gt_bigram_from_3 <- lapply(gt_by_length[3:num_len],bigramize)
+gt_bigram_from_3 <- melt(gt_bigram_from_3)
+save(gt_bigram_from_3,file="../output/gt_bigram_from_3.Rdata")
+load("../output/gt_bigram_from_3.Rdata")
 
-## detect tesseract word error
-tesseract_vec <- str_split(clean_tesseract_txt," ")[[1]] #1124 tokens
-tesseract_if_clean <- unlist(lapply(tesseract_vec,ifCleanToken)) # source code of ifCleanToken in in lib folder
+### convert bigramized ground trurh dictionary to tabel
+### either by these comment-out codes or laoding from the Rdata file
+gt_bigram <- c(gt_bigram_from_3[,1],gt_by_length[[2]])
+gt_table <- table(gt_bigram)
+gt_table <- as.data.frame(gt_table)
+save(gt_table,file="../output/gt_table.Rdata")
+load("../output/gt_table.Rdata")
+
+### construct the feature lists of tesseract dictionary
+### either by these comment-out codes or laoding from the Rdata file
+feature_tm <- NA
+feature_tm <- system.time(feat_list <- lapply(ta_dictionary,extract_feature,gt_table,1))
+save(feat_list,file="../output/feat_list.Rdata")
+load("../output/feat_list.Rdata")
+
+### convert the feature lists to feature matrix
+### either by these comment-out codes or laoding from the Rdata file
+feat_mat <- do.call(rbind,lapply(feat_list,matrix,ncol=14,byrow=TRUE)) 
+colnames(feat_mat)<- names(feat_list[[1]])
+save(feat_mat,file="../output/feat_mat.Rdata")
+load("../output/feat_mat.Rdata")
+#colnames(feat_mat[,10])
 ```
+
+#SVM Evaluation
+```{r}
+#######################################
+### Data Prepare for SVM 
+feat_mat<-as.data.frame(feat_mat)
+# Replace NaN and Inf with 0 and 99999 respectively
+feat_mat[feat_mat=="NaN"]<-0
+feat_mat[feat_mat=="Inf"]<-99999
+ta_labels_df <- data.frame(matrix(unlist(ta_labels), nrow = 298728, byrow = TRUE))
+colnames(ta_labels_df)<-"garbage"
+```
+
+```{r}
+#######################################
+### Model Setup
+### For all the data, we use 80% as trainset
+### Ideally we would use 20% remaining as testset. But for accuracy as well as serving as a dictionary
+### purpose, we use 100% as testset
+feat_mat_all <- feat_mat[1:298728,]
+ta_labels_df_all <- ta_labels_df[1:298728,]
+feat_mat_all <- cbind(feat_mat_all,ta_labels_df_all)
+colnames(feat_mat_all)[15]<-c("garbage")
+feat_mat_all$garbage[feat_mat_all$garbage==1]<-2
+feat_mat_all$garbage[feat_mat_all$garbage==0]<-1
+feat_mat_all$garbage[feat_mat_all$garbage==2]<-0
+# Split data into a train and test set
+index <- 1:nrow(feat_mat_all)
+testindex <- sample(index, trunc(length(index)/5))
+testset <- feat_mat_all[testindex,]
+trainset <- feat_mat_all[-testindex,]
+```
+
+```{r}
+#######################################
+### Model
+### Fit the model and predict the testset values
+### Because feat8 is constant, remove it from SVM
+trainset$feat8 <- NULL
+testset$feat8<-NULL
+trainset$garbage<-as.factor(trainset$garbage)
+feat_mat_all$feat8<-NULL
+### Model without tuning 
+# svm.model.1 <- svm(garbage ~., data = trainset, kernel = "linear", cost = 100, gamma = 1)
+# svm.pred.1 <- predict(svm.model.1, testset[,-14])
+# accuracy.1 <- mean(svm.pred.1==testset$garbage)
+### Check Balance
+balance <- sum(ta_labels_df$garbage)/nrow(ta_labels_df)
+print(balance)
+### Becasue balance is 66.6%, we consider the data is balance
+```
+
+```{r}
+#######################################
+### Tuning with grid search
+# model.tune <- tune(svm, garbage ~., data = trainset, range = list(cost = c(0.1,1,10,100), gamma = c(0.01,1,10,100,1000)))
+#######################################
+### Tuning with point test [find out that model 3 is the best one]
+# svm.model.2 <- svm(garbage ~ ., data = trainset, cost = 10, gamma = 1)
+# svm.pred.2 <- predict(svm.model.2, trainset[,-14])
+# accuracy.2 <- mean(svm.pred.2==testset$garbage)
+
+svm.model.3 <- svm(garbage ~ ., data = trainset, cost = 1, gamma = 1)
+svm.pred.3 <- predict(svm.model.3, feat_mat_all[,-14])
+accuracy.3 <- mean(svm.pred.3==testset$garbage)
+save(svm.model.3, file = "../ouput/svm.model.best.rda")
+save(svm.pred.3, file = "../output/svm.model.pred.rda")
+load("../ouput/svm.model.best.rda")
+load("../output/svm.model.pred.rda")
+
+# svm.model.4 <- svm(garbage ~ ., data = trainset, cost = 100, gamma = 0.1)
+# svm.pred.4 <- predict(svm.model.4, testset[,-14])
+# accuracy.4 <- mean(svm.pred.4==testset$garbage)
+# 
+# svm.model.5 <- svm(garbage ~ ., data = trainset, cost = 10, gamma = 0.1)
+# svm.pred.5 <- predict(svm.model.5, testset[,-14])
+# accuracy.5 <- mean(svm.pred.5==testset$garbage)
+# 
+# svm.model.6 <- svm(garbage ~ ., data = trainset, cost = 100, gamma = 0.01)
+# svm.pred.6 <- predict(svm.model.6, testset[,-14])
+# accuracy.6 <- mean(svm.pred.6==testset$garbage)
+# 
+# svm.model.7 <- svm(garbage ~ ., data = trainset, cost = 10, gamma = 0.01)
+# svm.pred.7 <- predict(svm.model.7, testset[,-14])
+# accuracy.7 <- mean(svm.pred.7==testset$garbage)
+```
+
+```{r}
+#######################################
+# Prepare SVM output for Correction Section
+svm.pred.3 <- as.data.frame(svm.pred.3)
+ta_dictionary <- as.data.frame(ta_dictionary)
+IndexID <- rownames(svm.pred.3)
+rownames(svm.pred.3) <- NULL
+svm.pred.3 <-cbind(IndexID, svm.pred.3)
+IndexID <- rownames(ta_dictionary)
+rownames(ta_dictionary) <- NULL
+ta_dictionary <- cbind(IndexID, ta_dictionary)
+svm.pred.3_dic <- merge.data.frame(svm.pred.3,ta_dictionary,by = "IndexID")
+colnames(svm.pred.3_dic)[2]<- c("garbage")
+svm.pred.3_dic<-subset(svm.pred.3_dic, select = -IndexID)
+save(svm.pred.3_dic, file = "../output/svm.pred.3_dic.rda")
+load("../output/svm.pred.3_dic.rda")
+```
+
+
 
 # Step 4 - Error correction
 
 Given the detected word error, in order to find the best correction, we need to generating the candidate corrections: a dictionary or a database of legal n-grams to locate one or more potential correction terms. Then we need invoke some lexical-similarity measure between the misspelled string and the candidates or a probabilistic estimate of the likelihood of the correction to rank order the candidates.
 
-The referenced papers are:
 
-1. [Letter n-gram](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1672564}{positional binary digram)
-
-- focus on section 3-b.error correction
-
-2. Supervised model -- [correction regressor](https://arxiv.org/pdf/1611.06950.pdf)
-
-3. [probability scoring without context](https://link.springer.com/content/pdf/10.1007%2FBF01889984.pdf)
-
-- focus on section 3
-
-4. [probability scoring with contextual constraints](https://link.springer.com/content/pdf/10.1007%2FBF01889984.pdf)
-
-- focus on section 5
-
-5. [topic models](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=4377099)
-
-Here, in our code, we just simply remove the detected-errors.
+- We applied error correction on two different corpus, one is from the groundtruth data, the other is the AP corpus which was also used in the paper D3
 ```{r}
-tesseract_delete_error_vec <- tesseract_vec[tesseract_if_clean] #1095
+####################Propose Candidates for Error words based on AP corpus#######################
+data("AssociatedPress",package = "topicmodels")
+terms <- Terms(AssociatedPress) #extract the unqiue terms 
+dict <- data.frame(terms) # the dictionary 
+colnames(dict) <- 'words' # create matrix for dictionary, and colname is 'words'
+ap_td <- tidy(AssociatedPress)
+ap_td  #the matrix: the document, the term, the count 
+corp <- ap_td %>% 
+  count(term, sort =F, wt=count) 
+head(corp, 10) # the frequency of the term
+
+#### Calculate the frequency for characters and bigrams 
+strcount <- function(x, pattern){
+  unlist(lapply(strsplit(x, NULL),function(z) na.omit(length(grep(pattern, z)))))
+}
+
+bi_mat<- matrix(0,26,26)
+colnames(bi_mat)<- letters
+rownames(bi_mat)<- letters
+search_for_bi<- function(bi){
+  total<- 0
+  for(i in corp$term){
+    num<- sum(gregexpr(bi, i, fixed=TRUE)[[1]] > 0)
+    total<- total+num
+  }
+  return(total)
+}
+
+corp_char<- matrix(NA,nrow=1,ncol=702)
+cc<- c()
+for(i in letters){
+  for(j in letters){
+    cc<- c(cc,paste0(i,j))
+  }
+}
+colnames(corp_char)<- c(letters,cc)
+
+for(i in letters){
+  for(j in letters){
+    bi<- paste0(i,j)
+    num<- search_for_bi(bi)
+    corp_char[1,bi]<- num
+  }
+}
+
+for (i in letters) {
+  total<- 0
+  for(j in corp$term){
+    num<- sum(gregexpr(i, j, fixed=TRUE)[[1]] > 0)
+    total<- total+num
+  }
+  corp_char[1,i]<- total
+}
+
+corplist_word<- hash(keys=corp$term,values=corp$n)
+corplist_char<- hash(keys=colnames(corp_char),values=corp_char[1,])
+N<- sum(corp$n)
+V<-length(corp$term)
+save(corp,N,V,corplist_word,corplist_char,file = '../output/APcorpus.Rdata')
+load('../output/APcorpus.Rdata')
+```
+
+```{r}
+### Error Correction based on AP corpus
+source('../lib/AP_functions.R')
+confusion_del <- read.csv("../data/del_matrix.csv",row.names = 1)
+confusion_ins <- read.csv("../data/add_matrix.csv",row.names = 1)
+confusion_sub <- read.csv("../data/sub_matrix.csv",row.names = 1)
+confusion_rev <- read.csv("../data/rev_matrix.csv",row.names = 1)
+cor_word <- function(word){
+  for (i in 1:length(word)) {
+    result <- rbind(alg_del(word[i]),alg_ins(word[i]),alg_rev(word[i]),alg_subs(word[i]))
+    words <- result[,1]
+    scores <- as.numeric(result[,2])
+    for (i in 1:4){
+      if (scores[i] == max(scores)){
+        return(words[i])
+      }
+    }
+  }
+}
+# test for single error word
+cor_word("figth")
+```
+
+
+```{r}
+##################Generate GroundTruth corpus and create confusion matrix based on the corpus###################
+### Pre Processing for text alignment
+file_name_vec <- list.files("../data/ground_truth")
+missingline<- read.xlsx('../data/AddLine_ver2.xlsx')
+truth_all<- c()
+tess_all<- c()
+for(i in c(1:length(file_name_vec))){
+  truth<- readLines(paste0('../data/ground_truth/',file_name_vec[i]))
+  tess<- readLines(paste0('../data/tesseract/',file_name_vec[i]))
+  for (j in missingline$FileName) {
+    if(file_name_vec[i]==j){
+      addline<- as.numeric(missingline[which(missingline$FileName==j),"Line"])
+      if(addline>length(tess)){
+        tess<- c(tess,' ')
+      }
+      else{
+        tess<- c(tess[1:(addline-1)],' ',tess[addline:length(tess)])
+      }
+    }
+  }
+  truth_all<- c(truth_all,truth)
+  tess_all<- c(tess_all,tess)
+}
+
+### Keep lines with same number of tokens  
+gt_token2<- strsplit(truth_all,' ')
+tr_token2<- strsplit(tess_all,' ')
+i <- 0
+k <- 0
+gt_right_token <- list()
+tr_right_token <- list()
+for (n in 1:length(gt_token2)){
+  if (length(gt_token2[[n]]) == length(tr_token2[[n]])) {
+    
+    i = i + 1
+    gt_right_token[[i]] <- sapply(sapply(gt_token2[[n]], tolower),removePunctuation)
+    tr_right_token[[i]] <- sapply(sapply(tr_token2[[n]], tolower),removePunctuation)
+  } else{
+    k = k+1
+  }
+}
+
+#### Combine groundtruth and tess words 
+row_ = list()
+col_ = list()
+char_ = list()
+char_tr = list()
+error = list()
+i <- 1
+for ( per_row in 1:length(gt_right_token)) {
+  for (per_col in 1:length(gt_right_token[[per_row]])) {
+    row_[i] <- per_row
+    col_[i] <- per_col
+    char_[i] <- gt_right_token[[per_row]][per_col]
+    char_tr[i] <- tr_right_token[[per_row]][per_col]
+    error[i] <- ifelse(gt_right_token[[per_row]][per_col] == tr_right_token[[per_row]][per_col], 0, 1)
+    i = i +1
+  }
+}
+data_frame_gt_row <- as.data.frame(as.vector(unlist(row_)))
+data_frame_gt_col <- as.data.frame(as.vector(unlist(col_)))
+data_frame_gt_char <- as.data.frame(as.vector(unlist(char_)))
+data_frame_tr_char <- as.data.frame(as.vector(unlist(char_tr)))
+data_frame_error <- as.data.frame(as.vector(unlist(error)))
+data_frame <- cbind(data_frame_gt_row,data_frame_gt_col,data_frame_gt_char,data_frame_tr_char,data_frame_error )
+names(data_frame) <- c("row","col","character_gt","character_tr","error")
+dim(data_frame)
+dim(data_frame[which(data_frame['error']==1),])
+dict_word <- data_frame["character_gt"]
+dim(unique(dict_word))
+
+#### Generate Groundtruth Corpus
+dict <- data_frame_gt_char
+colnames(dict) <- 'words' # create data frame for dictionary, and colname is 'words'
+dict<- as.data.frame(dict[dict$words!="",])
+colnames(dict)<- 'words'
+# For words
+corp_groundtruth <- dict %>% 
+  count(words, sort =T) 
+head(corp_groundtruth, 20) # the frequency of the words
+corplist_word_groundtruth<- hash(keys=corp_groundtruth$words,values=corp_groundtruth$n)
+N_groundtruth<- sum(corp_groundtruth$n)
+V_groundtruth<-length(corp_groundtruth$words)
+
+# For single and bigram
+strcount <- function(x, pattern){
+  unlist(lapply(strsplit(x, NULL),function(z) na.omit(length(grep(pattern, z)))))
+}
+search_for_bi<- function(bi){
+  total<- 0
+  for(i in corp_groundtruth$words){
+    num<- sum(gregexpr(bi, i, fixed=TRUE)[[1]] > 0)
+    total<- total+num
+  }
+  return(total)
+}
+bi_mat<- matrix(0,26,26)
+colnames(bi_mat)<- letters
+rownames(bi_mat)<- letters
+corp_char<- matrix(NA,nrow=1,ncol=702)
+cc<- c()
+for(i in letters){
+  for(j in letters){
+    cc<- c(cc,paste0(i,j))
+  }
+}
+colnames(corp_char)<- c(letters,cc)
+for(i in letters){
+  for(j in letters){
+    bi<- paste0(i,j)
+    num<- search_for_bi(bi)
+    corp_char[1,bi]<- num
+  }
+}
+for (i in letters) {
+  total<- 0
+  for(j in corp_groundtruth$words){
+    num<- sum(gregexpr(i, j, fixed=TRUE)[[1]] > 0)
+    total<- total+num
+  }
+  corp_char[1,i]<- total
+}
+corplist_char_groundtruth<- hash(keys=colnames(corp_char),values=corp_char[1,])
+save(corp_groundtruth,N_groundtruth,V_groundtruth,corplist_word_groundtruth,corplist_char_groundtruth,file = '../output/Groundtruth_corpus.Rdata')
+load('../output/Groundtruth_corpus.Rdata')
+```
+
+
+```{r}
+##### Generate confusion matrix based on Groundtruth data
+## Reversion Confusion Matrice ##
+rev_mat<- matrix(0,26,26)
+colnames(rev_mat)<- letters
+rownames(rev_mat)<- letters
+wrongtext<- data_frame[data_frame$error==1,]
+for (i in 1:nrow(wrongtext)) {  
+  tr<- as.character(wrongtext$character_tr[i])
+  gt<- as.character(wrongtext$character_gt[i])
+  char_list<- unlist(strsplit(tr,NULL))
+  if(length(char_list)>=2){
+    for (j in 1:(length(char_list)-1)) {
+      temp_char_list<- char_list
+      y<- char_list[j]
+      x<- char_list[j+1]
+      temp_char_list[j]<- x
+      temp_char_list[j+1]<- y
+      temp_char<- paste(temp_char_list,collapse = "")
+      #print(temp_char)    
+      if(temp_char==gt){
+        rev_mat[x,y]<- rev_mat[x,y]+1
+      }
+    }
+  }
+}
+##Substitution Confusion Matrice ##
+sub_mat<- matrix(0,26,26)
+colnames(sub_mat)<- letters
+rownames(sub_mat)<- letters
+for (i in 1:nrow(wrongtext)) {  
+  tr<- as.character(wrongtext$character_tr[i])
+  gt<- as.character(wrongtext$character_gt[i])
+  char_list<- unlist(strsplit(tr,NULL))
+  for(j in 1:length(char_list)){
+    x<- char_list[j]
+    temp_char_list<- char_list
+    for (y in letters) {
+      temp_char_list[j]<- y
+      temp_char<- paste(temp_char_list,collapse = "")
+      if(temp_char==gt && (x %in% letters) && (y %in% letters)){
+        #cat(x,y,sep = '/')
+        sub_mat[x,y]<- sub_mat[x,y]+1
+      }
+    }
+  }
+}
+
+############################### Generate candidates & Compute Confusion Matrix ######################################
+
+
+wrong_data <- data_frame[which(data_frame['error']==1),]
+dim(wrong_data)[1]
+
+### Deletion confusion matrix
+
+# Generate empty matrix
+del_matrix <- matrix(0, nrow = 27, ncol = 26, dimnames = list(c(letters[1:26],"@"),c(letters[1:26])))
+# Write calculation function
+del_candidate <- function(wrong_word,right_word){
+  for (n in 0:nchar(wrong_word)){
+    if (n == 0){
+      x <- "@"
+      for (y in letters[1:26]){
+        if (paste0(y,wrong_word) == right_word){del_matrix[x,y] = del_matrix[x,y] + 1}
+      }
+    } else{
+      if (substr(wrong_word,n,n) %in% letters){
+        x <- substr(wrong_word,n,n)
+        for (y in letters[1:26]){ 
+          if (paste0(substr(wrong_word,1,n),y,substr(wrong_word,n+1,nchar(wrong_word))) == right_word){del_matrix[x,y] = del_matrix[x,y] + 1}
+        }
+      }
+    }
+  }
+  return(del_matrix)
+}
+# Check for each pair of words
+for (num in 1:dim(wrong_data)[1]){
+  wrong_word <- as.character(wrong_data$character_tr[num])
+  right_word <- as.character(wrong_data$character_gt[num])
+  del_matrix <- del_candidate(wrong_word,right_word)
+  if (num%%1000 == 0){print("1000")}
+}
+
+### Insertion confusion matrix
+
+# Generate empty matrix
+insert_matrix <- matrix(0, nrow = 27, ncol = 26, dimnames = list(c(letters[1:26],"@"),c(letters[1:26])))
+# Write calculation function
+insert_candidate <- function(wrong_word,right_word){
+  for (n in 0:nchar(wrong_word)-1){
+    if (n == 0 & substr(wrong_word,n+1,n+1) %in% letters){
+      x <- "@"
+      if (substr(wrong_word,2,nchar(wrong_word)) == right_word){
+        y <- substr(wrong_word,1,1)
+        insert_matrix[x,y] = insert_matrix[x,y] + 1
+      }
+    } else{
+      if (substr(wrong_word,n,n) %in% letters & substr(wrong_word,n+1,n+1) %in% letters){
+        x <- substr(wrong_word,n,n)
+        if (paste0(substr(wrong_word,1,n),substr(wrong_word,n+2,nchar(wrong_word))) == right_word){
+          y <- substr(wrong_word,n+1,n+1)
+          insert_matrix[x,y] = insert_matrix[x,y] + 1
+        }
+      }
+    }
+  }
+  return(insert_matrix)
+}
+# Check for each pair of words
+for (num in 1:dim(wrong_data)[1]){
+  wrong_word <- as.character(wrong_data$character_tr[num])
+  right_word <- as.character(wrong_data$character_gt[num])
+  insert_matrix <- insert_candidate(wrong_word,right_word)
+  if (num%%1000 == 0){print("1000")}
+}
+
+save(rev_mat,sub_mat,del_matrix,insert_matrix,file='../output/ConfusionMatrice_groundtruth.RData')
+load('../output/ConfusionMatrice_groundtruth.RData')
+```
+
+
+```{r}
+##### Error Correction based on Groundtruth corpus
+source('../lib/Groundtruth_functions.R')
+## load dectected error words
+cor_word <- function(word){
+  for (i in 1:length(word)) {
+    result <- rbind(alg_del(word[i]),alg_ins(word[i]),alg_rev(word[i]),alg_subs(word[i]))
+    words <- result[,1]
+    scores <- as.numeric(result[,2])
+    for (i in 1:4){
+      if (scores[i] == max(scores)){
+        return(words[i])
+      }
+    }
+  }
+}
+
+cor_word("figth")
 ```
 
 # Step 5 - Performance measure
@@ -167,39 +595,17 @@ Both *precision* and *recall* are mathematically convenient measures because the
 Here, we only finished the **word level evaluation** criterions, you are required to complete the **letter-level** part.
 
 ```{r}
-ground_truth_vec <- str_split(paste(current_ground_truth_txt, collapse = " ")," ")[[1]] #1078
-old_intersect_vec <- vecsets::vintersect(tolower(ground_truth_vec), tolower(tesseract_vec)) #607
-new_intersect_vec <- vecsets::vintersect(tolower(ground_truth_vec), tolower(tesseract_delete_error_vec)) #600
+#ground_truth_vec <- str_split(paste(current_ground_truth_txt, collapse = " ")," ")[[1]] #1078
+#old_intersect_vec <- vecsets::vintersect(tolower(ground_truth_vec), tolower(tesseract_vec)) #607
+#new_intersect_vec <- vecsets::vintersect(tolower(ground_truth_vec), tolower(tesseract_delete_error_vec)) #600
 
-OCR_performance_table <- data.frame("Tesseract" = rep(NA,4),
-                                    "Tesseract_with_postprocessing" = rep(NA,4))
-row.names(OCR_performance_table) <- c("word_wise_recall","word_wise_precision",
-                                                 "character_wise_recall","character_wise_precision")
-OCR_performance_table["word_wise_recall","Tesseract"] <- length(old_intersect_vec)/length(ground_truth_vec)
-OCR_performance_table["word_wise_precision","Tesseract"] <- length(old_intersect_vec)/length(tesseract_vec)
-OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec)/length(ground_truth_vec)
-OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- length(new_intersect_vec)/length(tesseract_delete_error_vec)
-kable(OCR_performance_table, caption="Summary of OCR performance")
+#OCR_performance_table <- data.frame("Tesseract" = rep(NA,4),
+#                                    "Tesseract_with_postprocessing" = rep(NA,4))
+#row.names(OCR_performance_table) <- c("word_wise_recall","word_wise_precision",
+#                                                 "character_wise_recall","character_wise_precision")
+#OCR_performance_table["word_wise_recall","Tesseract"] <- length(old_intersect_vec)/length(ground_truth_vec)
+#OCR_performance_table["word_wise_precision","Tesseract"] <- length(old_intersect_vec)/length(tesseract_vec)
+#OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec)/length(ground_truth_vec)
+#OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- #length(new_intersect_vec)/length(tesseract_delete_error_vec)
+#kable(OCR_performance_table, caption="Summary of OCR performance")
 ```
-
-Besides the above required measurement, you are encouraged the explore more evaluation measurements. Here are some related references:
-
-1. Karpinski, R., Lohani, D., & Belaïd, A. *Metrics for Complete Evaluation of OCR Performance*. [pdf](https://csce.ucmss.com/cr/books/2018/LFS/CSREA2018/IPC3481.pdf)
-
-- section 2.1 Text-to-Text evaluation
-
-2. Mei, J., Islam, A., Wu, Y., Moh'd, A., & Milios, E. E. (2016). *Statistical learning for OCR text correction*. arXiv preprint arXiv:1611.06950. [pdf](https://arxiv.org/pdf/1611.06950.pdf)
-
-- section 5, separate the error detection and correction criterions
-
-3. Belaid, A., & Pierron, L. (2001, December). *Generic approach for OCR performance evaluation*. In Document Recognition and Retrieval IX (Vol. 4670, pp. 203-216). International Society for Optics and Photonics. [pdf](https://members.loria.fr/ABelaid/publis/spie02-belaid-pierron.pdf)
-
-- section 3.2, consider the text alignment
-
-# References {-}
-
-1. Borovikov, E. (2014). *A survey of modern optical character recognition techniques*. arXiv preprint arXiv:1412.4183.[pdf](https://pdfs.semanticscholar.org/79c9/cc90b8c2e2c9c54c3862935ea00df7dd56ed.pdf)
-(This paper is the source of our evaluation criterion)
-
-2. Kukich, K. (1992). *Techniques for automatically correcting words in text*. Acm Computing Surveys (CSUR), 24(4), 377-439. [pdf](http://www.unige.ch/eti/ptt/docs/kukich-92.pdf)
-(This paper is the benchmark review paper)
