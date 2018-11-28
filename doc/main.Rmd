@@ -63,12 +63,13 @@ Now, we are ready to conduct post-processing, based on the Tessearct OCR output.
 ```{r}
 ### generate labels
 ### either by these comment-out codes or laoding from the Rdata file
-labels_tm <- NA
-labels_tm <- system.time(ta_labels <- unlist(lapply(ta_dictionary,make_label,gt_dictionary)))
-lab_mat <- cbind(ta_dictionary,ta_labels)
-save(ta_labels,file="../output/ta_labels.Rdata")
+
+#labels_tm <- NA
+#labels_tm <- system.time(ta_labels <- unlist(lapply(ta_dictionary,make_label,gt_dictionary)))
+#lab_mat <- cbind(ta_dictionary,ta_labels)
+#save(ta_labels,file="../output/ta_labels.Rdata")
 load("../output/ta_labels.Rdata")
-save(lab_mat,file="../output/lab_mat.Rdata")
+#save(lab_mat,file="../output/lab_mat.Rdata")
 load("../output/lab_mat.Rdata")
 ```
 
@@ -171,12 +172,14 @@ print(balance)
 # svm.pred.2 <- predict(svm.model.2, trainset[,-14])
 # accuracy.2 <- mean(svm.pred.2==testset$garbage)
 
-svm.model.3 <- svm(garbage ~ ., data = trainset, cost = 1, gamma = 1)
-svm.pred.3 <- predict(svm.model.3, feat_mat_all[,-14])
-accuracy.3 <- mean(svm.pred.3==testset$garbage)
-save(svm.model.3, file = "../ouput/svm.model.best.rda")
-save(svm.pred.3, file = "../output/svm.model.pred.rda")
-load("../ouput/svm.model.best.rda")
+
+########!!!!!!!!!!!!!Commented Here !!!!!!!!!! Remember to uncomment them
+#svm.model.3 <- svm(garbage ~ ., data = trainset, cost = 1, gamma = 1)
+#svm.pred.3 <- predict(svm.model.3, feat_mat_all[,-14])
+#accuracy.3 <- mean(svm.pred.3==testset$garbage)
+#save(svm.model.3, file = "../output/svm.model.best.rda")
+#save(svm.pred.3, file = "../output/svm.model.pred.rda")
+load("../output/svm.model.best.rda")
 load("../output/svm.model.pred.rda")
 
 # svm.model.4 <- svm(garbage ~ ., data = trainset, cost = 100, gamma = 0.1)
@@ -221,104 +224,17 @@ load("../output/svm.pred.3_dic.rda")
 Given the detected word error, in order to find the best correction, we need to generating the candidate corrections: a dictionary or a database of legal n-grams to locate one or more potential correction terms. Then we need invoke some lexical-similarity measure between the misspelled string and the candidates or a probabilistic estimate of the likelihood of the correction to rank order the candidates.
 
 
-- We applied error correction on two different corpus, one is from the groundtruth data, the other is the AP corpus which was also used in the paper D3
-```{r}
-####################Propose Candidates for Error words based on AP corpus#######################
-data("AssociatedPress",package = "topicmodels")
-terms <- Terms(AssociatedPress) #extract the unqiue terms 
-dict <- data.frame(terms) # the dictionary 
-colnames(dict) <- 'words' # create matrix for dictionary, and colname is 'words'
-ap_td <- tidy(AssociatedPress)
-ap_td  #the matrix: the document, the term, the count 
-corp <- ap_td %>% 
-  count(term, sort =F, wt=count) 
-head(corp, 10) # the frequency of the term
+- We applied error correction on two different corpus, one is from the groundtruth data, the other is the AP corpus which was also used in the paper D3, and before that we will do text alignment firstly.
 
-#### Calculate the frequency for characters and bigrams 
-strcount <- function(x, pattern){
-  unlist(lapply(strsplit(x, NULL),function(z) na.omit(length(grep(pattern, z)))))
-}
-
-bi_mat<- matrix(0,26,26)
-colnames(bi_mat)<- letters
-rownames(bi_mat)<- letters
-search_for_bi<- function(bi){
-  total<- 0
-  for(i in corp$term){
-    num<- sum(gregexpr(bi, i, fixed=TRUE)[[1]] > 0)
-    total<- total+num
-  }
-  return(total)
-}
-
-corp_char<- matrix(NA,nrow=1,ncol=702)
-cc<- c()
-for(i in letters){
-  for(j in letters){
-    cc<- c(cc,paste0(i,j))
-  }
-}
-colnames(corp_char)<- c(letters,cc)
-
-for(i in letters){
-  for(j in letters){
-    bi<- paste0(i,j)
-    num<- search_for_bi(bi)
-    corp_char[1,bi]<- num
-  }
-}
-
-for (i in letters) {
-  total<- 0
-  for(j in corp$term){
-    num<- sum(gregexpr(i, j, fixed=TRUE)[[1]] > 0)
-    total<- total+num
-  }
-  corp_char[1,i]<- total
-}
-
-corplist_word<- hash(keys=corp$term,values=corp$n)
-corplist_char<- hash(keys=colnames(corp_char),values=corp_char[1,])
-N<- sum(corp$n)
-V<-length(corp$term)
-save(corp,N,V,corplist_word,corplist_char,file = '../output/APcorpus.Rdata')
-load('../output/APcorpus.Rdata')
-```
-
-```{r}
-### Error Correction based on AP corpus
-source('../lib/AP_functions.R')
-confusion_del <- read.csv("../data/del_matrix.csv",row.names = 1)
-confusion_ins <- read.csv("../data/add_matrix.csv",row.names = 1)
-confusion_sub <- read.csv("../data/sub_matrix.csv",row.names = 1)
-confusion_rev <- read.csv("../data/rev_matrix.csv",row.names = 1)
-cor_word <- function(word){
-  for (i in 1:length(word)) {
-    result <- rbind(alg_del(word[i]),alg_ins(word[i]),alg_rev(word[i]),alg_subs(word[i]))
-    words <- result[,1]
-    scores <- as.numeric(result[,2])
-    for (i in 1:4){
-      if (scores[i] == max(scores)){
-        return(words[i])
-      }
-    }
-  }
-}
-# test for single error word
-cor_word("figth")
-```
-
-
-```{r}
-##################Generate GroundTruth corpus and create confusion matrix based on the corpus###################
+```{r,warning=FALSE}
 ### Pre Processing for text alignment
 file_name_vec <- list.files("../data/ground_truth")
 missingline<- read.xlsx('../data/AddLine_ver2.xlsx')
 truth_all<- c()
 tess_all<- c()
 for(i in c(1:length(file_name_vec))){
-  truth<- readLines(paste0('../data/ground_truth/',file_name_vec[i]))
-  tess<- readLines(paste0('../data/tesseract/',file_name_vec[i]))
+  truth<- readLines(paste0(' ../data/ground_truth/',file_name_vec[i]), encoding="UTF-8")
+  tess<- readLines(paste0('../data/tesseract/',file_name_vec[i]), encoding="UTF-8")
   for (j in missingline$FileName) {
     if(file_name_vec[i]==j){
       addline<- as.numeric(missingline[which(missingline$FileName==j),"Line"])
@@ -376,11 +292,163 @@ data_frame_tr_char <- as.data.frame(as.vector(unlist(char_tr)))
 data_frame_error <- as.data.frame(as.vector(unlist(error)))
 data_frame <- cbind(data_frame_gt_row,data_frame_gt_col,data_frame_gt_char,data_frame_tr_char,data_frame_error )
 names(data_frame) <- c("row","col","character_gt","character_tr","error")
-dim(data_frame)
-dim(data_frame[which(data_frame['error']==1),])
-dict_word <- data_frame["character_gt"]
-dim(unique(dict_word))
+save(data_frame, file = "../output/data_cleaned.RData")
+load("../output/data_cleaned.RData")
+remove(row_)
+remove(col_)
+remove(char_)
+remove(char_gt)
+remove(error)
+```
 
+
+```{r,warning=FALSE}
+############################## Add Result from Detection Model (SVM) #############################
+load("../output/data_cleaned.RData")
+load("../output/svm.pred.3_dic.rda")
+
+svm_label <- svm.pred.3_dic
+remove(svm.pred.3_dic)
+i <- sapply(svm_label, is.factor)
+svm_label[i] <- lapply(svm_label[i], as.character)
+i <- sapply(data_frame,is.factor)
+data_frame[i] <- lapply(data_frame[i], as.character)
+Encoding(svm_label$ta_dictionary)<-"UTF-8"
+Encoding(svm_label$garbage)<-"UTF-8"
+Encoding(data_frame$character_tr)<-"UTF-8"
+Encoding(data_frame$character_gt)<-"UTF-8"
+library(tm)
+data_frame$character_tr <- removePunctuation(tolower(data_frame$character_tr))
+svm_label$ta_dictionary <-removePunctuation(tolower(svm_label$ta_dictionary))
+
+#######remove duplicated data
+index_du <- base::duplicated(svm_label$ta_dictionary)
+rm_svm <- svm_label[!index_du,]
+
+rm_svm$garbage <- as.numeric(rm_svm$garbage)
+generate_gar <- function(x){
+  return(rm_svm[which(rm_svm$ta_dictionary==x),"garbage"])
+}
+
+data_frame$garbage<- mapply(generate_gar,data_frame$character_tr)
+#new_data$accuracy <- ifelse(new_data$garbage==new_data$error,1,0) #About 80%
+save(data_frame, file = "../output/data_detect_label.RData")
+load("../output/data_detect_label.RData")
+```
+
+
+```{r}
+####################Propose Candidates for Error words based on AP corpus#######################
+library(tm)
+library(topicmodels)
+library(dplyr)
+library(tidytext)
+data("AssociatedPress",package = "topicmodels")
+terms <- Terms(AssociatedPress) #extract the unqiue terms 
+dict <- data.frame(terms) # the dictionary 
+colnames(dict) <- 'words' # create matrix for dictionary, and colname is 'words'
+
+ap_td <- tidy(AssociatedPress)
+ap_td  #the matrix: the document, the term, the count 
+corp <- ap_td %>% 
+  count(term, sort =F, wt=count) 
+head(corp, 10) # the frequency of the term
+
+#### Calculate the frequency for characters and bigrams 
+strcount <- function(x, pattern){
+  unlist(lapply(strsplit(x, NULL),function(z) na.omit(length(grep(pattern, z)))))
+}
+
+bi_mat<- matrix(0,26,26)
+colnames(bi_mat)<- letters
+rownames(bi_mat)<- letters
+search_for_bi<- function(bi){
+  total<- 0
+  for(i in corp$term){
+    num<- sum(gregexpr(bi, i, fixed=TRUE)[[1]] > 0)
+    total<- total+num
+  }
+  return(total)
+}
+
+corp_char<- matrix(NA,nrow=1,ncol=702)
+cc<- c()
+for(i in letters){
+  for(j in letters){
+    cc<- c(cc,paste0(i,j))
+  }
+}
+colnames(corp_char)<- c(letters,cc)
+
+for(i in letters){
+  for(j in letters){
+    bi<- paste0(i,j)
+    num<- search_for_bi(bi)
+    corp_char[1,bi]<- num
+  }
+}
+
+for (i in letters) {
+  total<- 0
+  for(j in corp$term){
+    num<- sum(gregexpr(i, j, fixed=TRUE)[[1]] > 0)
+    total<- total+num
+  }
+  corp_char[1,i]<- total
+}
+corplist_word<- hash(keys=corp$term,values=corp$n)
+corplist_char<- hash(keys=colnames(corp_char),values=corp_char[1,])
+N<- sum(corp$n)
+V<-length(corp$term)
+save(corp,N,V,corplist_word,corplist_char,file = '../output/APcorpus.Rdata')
+
+load('../output/APcorpus.Rdata')
+```
+
+
+```{r}
+### Error Correction based on AP corpus
+source('../lib/AP_functions.R')
+confusion_del <- read.csv("../data/del_matrix.csv",row.names = 1)
+confusion_ins <- read.csv("../data/add_matrix.csv",row.names = 1)
+confusion_sub <- read.csv("../data/sub_matrix.csv",row.names = 1)
+confusion_rev <- read.csv("../data/rev_matrix.csv",row.names = 1)
+cor_word <- function(word){
+  for (i in 1:length(word)) {
+    result <- rbind(alg_del(word[i]),alg_ins(word[i]),alg_rev(word[i]),alg_subs(word[i]))
+    colnames(result) <- c("word", "score")
+    for (i in 1:4){
+      if (result[i,2] == max(result[,2])){
+        return(result[i,1])
+      }
+    }
+  }
+}
+# test for single error word
+cor_word("figth")
+
+
+data_frame$correct_word <- NA
+correct <- function(x,y){
+  y <- as.character(y)
+  x <- as.numeric(x)
+  n <- NA
+  if (x == 1 & y != ""){
+    n <- cor_word(y)
+  } else{
+    n <- y
+  }
+  return(n)
+}
+data_frame$correct_word <- mapply(correct,as.vector(data_frame$garbage),as.vector(data_frame$character_tr))
+
+save(data_frame, file = "../output/AP_Correction.RData") 
+load('../output/AP_Correction.RData')
+```
+
+
+```{r}
+##################Generate GroundTruth corpus and create confusion matrix based on the corpus###################
 #### Generate Groundtruth Corpus
 dict <- data_frame_gt_char
 colnames(dict) <- 'words' # create data frame for dictionary, and colname is 'words'
@@ -486,7 +554,7 @@ for (i in 1:nrow(wrongtext)) {
   }
 }
 
-############################### Generate candidates & Compute Confusion Matrix ######################################
+############################# Generate candidates & Compute Confusion Matrix ######################################
 
 
 wrong_data <- data_frame[which(data_frame['error']==1),]
@@ -578,7 +646,22 @@ cor_word <- function(word){
   }
 }
 
-cor_word("figth")
+data_frame$correct_word_groundtruth <- NA
+correct <- function(x,y){
+  y <- as.character(y)
+  x <- as.numeric(x)
+  n <- NA
+  if (x == 1 & y != ""){
+    n <- cor_word(y)
+  } else{
+    n <- y
+  }
+  return(n)
+}
+data_frame$correct_word_groundtruth <- mapply(correct,as.vector(data_frame$garbage),as.vector(data_frame$character_tr))
+
+save(data_frame, file = "../output/Groundtruth_Correction.RData") 
+load('../output/Groundtruth_Correction.RData')
 ```
 
 # Step 5 - Performance measure
@@ -595,17 +678,104 @@ Both *precision* and *recall* are mathematically convenient measures because the
 Here, we only finished the **word level evaluation** criterions, you are required to complete the **letter-level** part.
 
 ```{r}
-#ground_truth_vec <- str_split(paste(current_ground_truth_txt, collapse = " ")," ")[[1]] #1078
-#old_intersect_vec <- vecsets::vintersect(tolower(ground_truth_vec), tolower(tesseract_vec)) #607
-#new_intersect_vec <- vecsets::vintersect(tolower(ground_truth_vec), tolower(tesseract_delete_error_vec)) #600
+############################### AP Correction Evaluation ######################################
 
-#OCR_performance_table <- data.frame("Tesseract" = rep(NA,4),
-#                                    "Tesseract_with_postprocessing" = rep(NA,4))
-#row.names(OCR_performance_table) <- c("word_wise_recall","word_wise_precision",
-#                                                 "character_wise_recall","character_wise_precision")
-#OCR_performance_table["word_wise_recall","Tesseract"] <- length(old_intersect_vec)/length(ground_truth_vec)
-#OCR_performance_table["word_wise_precision","Tesseract"] <- length(old_intersect_vec)/length(tesseract_vec)
-#OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec)/length(ground_truth_vec)
-#OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- #length(new_intersect_vec)/length(tesseract_delete_error_vec)
-#kable(OCR_performance_table, caption="Summary of OCR performance")
+## Word-level
+data_frame$character_gt <- as.character(data_frame$character_gt)
+data_frame$character_tr <- as.character(data_frame$character_tr)
+new_intersect_AP <- nrow(data_frame[data_frame$correct_word == data_frame$character_gt,])
+old_intersect_AP <- nrow(data_frame[data_frame$character_tr == data_frame$character_gt,])
+
+
+OCR_performance_table <- data.frame("Tesseract" = rep(NA,4),
+                                    "Tesseract_with_postprocessing" = rep(NA,4))
+row.names(OCR_performance_table) <- c("word_wise_recall","word_wise_precision",
+                                      "character_wise_recall","character_wise_precision")
+OCR_performance_table["word_wise_recall","Tesseract"] <- old_intersect_AP/length(data_frame$character_gt)
+OCR_performance_table["word_wise_precision","Tesseract"] <- old_intersect_AP/length(data_frame$character_tr)
+OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- new_intersect_AP/length(data_frame$character_gt)
+OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- new_intersect_AP/length(data_frame$correct_word)
+
+## Character-level
+com_fun <- function(x,y,z=1){
+  x <- as.character(x)
+  y <- as.character(y)
+  n = 0
+  if(x==y){
+    return(nchar(x))
+  }else{
+    alpha_x <- as.vector(unlist(strsplit(x,"")))
+    alpha_y <- as.vector(unlist(strsplit(y,"")))
+    min_len <- min(length(alpha_x),length(alpha_y))
+    max_len <- max(length(alpha_x),length(alpha_y))
+    n <- length(intersect(alpha_x,alpha_y))
+    output <- list(n,max_len)
+    return(output[z])
+  }  
+}
+data_frame$correct_char_old_AP <- mapply(com_fun,as.vector(data_frame$character_gt),as.vector(data_frame$character_tr))
+data_frame$correct_char_new_AP <- mapply(com_fun,as.vector(data_frame$character_gt),as.vector(data_frame$correct_word))
+
+OCR_performance_table["character_wise_recall","Tesseract"] <- sum(as.numeric(data_frame$correct_char_old_AP))/sum(sapply(data_frame$character_gt,nchar))
+OCR_performance_table["character_wise_precision","Tesseract"] <- sum(as.numeric(data_frame$correct_char_old_AP))/sum(sapply(data_frame$character_tr,nchar))
+OCR_performance_table["character_wise_recall","Tesseract_with_postprocessing"] <- sum(as.numeric(data_frame$correct_char_new_AP))/sum(sapply(data_frame$character_gt,nchar))
+OCR_performance_table["character_wise_precision","Tesseract_with_postprocessing"] <- sum(as.numeric(data_frame$correct_char_new_AP))/sum(sapply(data_frame$correct_word,nchar))
+
+save(data_frame, file = "../output/AP_Correction_result.RData")
+save(OCR_performance_table,file = "../output/OCR_performance_table_AP.RData")
+
+OCR_performance_table
 ```
+
+
+```{r}
+############################### Groundtruth Data  Correction Evaluation ######################################
+
+## Word-level
+data_frame$character_gt <- as.character(data_frame$character_gt)
+data_frame$character_tr <- as.character(data_frame$character_tr)
+new_intersect_groundtruth <- nrow(data_frame[data_frame$correct_word_groundtruth == data_frame$character_gt,])
+old_intersect_groundtruth <- nrow(data_frame[data_frame$character_tr == data_frame$character_gt,])
+
+
+OCR_performance_table2 <- data.frame("Tesseract" = rep(NA,4),
+                                    "Tesseract_with_postprocessing" = rep(NA,4))
+row.names(OCR_performance_table2) <- c("word_wise_recall","word_wise_precision",
+                                      "character_wise_recall","character_wise_precision")
+OCR_performance_table2["word_wise_recall","Tesseract"] <- old_intersect_groundtruth/length(data_frame$character_gt)
+OCR_performance_table2["word_wise_precision","Tesseract"] <- old_intersect_groundtruth/length(data_frame$character_tr)
+OCR_performance_table2["word_wise_recall","Tesseract_with_postprocessing"] <- new_intersect_groundtruth/length(data_frame$character_gt)
+OCR_performance_table2["word_wise_precision","Tesseract_with_postprocessing"] <- new_intersect_groundtruth/length(data_frame$correct_word_groundtruth)
+
+## Character-level
+com_fun <- function(x,y,z=1){
+  x <- as.character(x)
+  y <- as.character(y)
+  n = 0
+  if(x==y){
+    return(nchar(x))
+  }else{
+    alpha_x <- as.vector(unlist(strsplit(x,"")))
+    alpha_y <- as.vector(unlist(strsplit(y,"")))
+    min_len <- min(length(alpha_x),length(alpha_y))
+    max_len <- max(length(alpha_x),length(alpha_y))
+    n <- length(intersect(alpha_x,alpha_y))
+    output <- list(n,max_len)
+    return(output[z])
+  }  
+}
+data_frame$correct_char_old_groundtruth <- mapply(com_fun,as.vector(data_frame$character_gt),as.vector(data_frame$character_tr))
+data_frame$correct_char_new_groundtruth <- mapply(com_fun,as.vector(data_frame$character_gt),as.vector(data_frame$correct_word_groundtruth))
+
+OCR_performance_table2["character_wise_recall","Tesseract"] <- sum(as.numeric(data_frame$correct_char_old_groundtruth))/sum(sapply(data_frame$character_gt,nchar))
+OCR_performance_table2["character_wise_precision","Tesseract"] <- sum(as.numeric(data_frame$correct_char_old_groundtruth))/sum(sapply(data_frame$character_tr,nchar))
+OCR_performance_table2["character_wise_recall","Tesseract_with_postprocessing"] <- sum(as.numeric(data_frame$correct_char_new_groundtruth))/sum(sapply(data_frame$character_gt,nchar))
+OCR_performance_table2["character_wise_precision","Tesseract_with_postprocessing"] <- sum(as.numeric(data_frame$correct_char_new_groundtruth))/sum(sapply(data_frame$correct_word_groundtruth,nchar))
+
+save(data_frame, file = "../output/Groundtruth_Correction_result.RData")
+save(OCR_performance_table2,file = "../output/OCR_performance_table_groundtruth.RData")
+load("../output/Groundtruth_Correction_result.RData")
+load("../output/OCR_performance_table_groundtruth.RData")
+OCR_performance_table2
+```
+

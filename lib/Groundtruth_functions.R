@@ -1,4 +1,3 @@
-
 alg_del <- function(word){
   n <- nchar(word) 
   out <- list()
