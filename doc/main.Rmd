@@ -232,9 +232,10 @@ file_name_vec <- list.files("../data/ground_truth")
 missingline<- read.xlsx('../data/AddLine_ver2.xlsx')
 truth_all<- c()
 tess_all<- c()
+library(openxlsx)
 for(i in c(1:length(file_name_vec))){
-  truth<- readLines(paste0(' ../data/ground_truth/',file_name_vec[i]), encoding="UTF-8")
-  tess<- readLines(paste0('../data/tesseract/',file_name_vec[i]), encoding="UTF-8")
+  truth<- readLines(paste0('/Users/huiyuzhang/Desktop/5243/Fall2018-Project4-sec1--sec1-proj4-grp4/data/ground_truth/',file_name_vec[i]), encoding="UTF-8")
+  tess<- readLines(paste0('/Users/huiyuzhang/Desktop/5243/Fall2018-Project4-sec1--sec1-proj4-grp4/data/tesseract/',file_name_vec[i]), encoding="UTF-8")
   for (j in missingline$FileName) {
     if(file_name_vec[i]==j){
       addline<- as.numeric(missingline[which(missingline$FileName==j),"Line"])
@@ -317,7 +318,6 @@ Encoding(svm_label$ta_dictionary)<-"UTF-8"
 Encoding(svm_label$garbage)<-"UTF-8"
 Encoding(data_frame$character_tr)<-"UTF-8"
 Encoding(data_frame$character_gt)<-"UTF-8"
-library(tm)
 data_frame$character_tr <- removePunctuation(tolower(data_frame$character_tr))
 svm_label$ta_dictionary <-removePunctuation(tolower(svm_label$ta_dictionary))
 
@@ -339,10 +339,6 @@ load("../output/data_detect_label.RData")
 
 ```{r}
 ####################Propose Candidates for Error words based on AP corpus#######################
-library(tm)
-library(topicmodels)
-library(dplyr)
-library(tidytext)
 data("AssociatedPress",package = "topicmodels")
 terms <- Terms(AssociatedPress) #extract the unqiue terms 
 dict <- data.frame(terms) # the dictionary 
@@ -636,15 +632,27 @@ source('../lib/Groundtruth_functions.R')
 cor_word <- function(word){
   for (i in 1:length(word)) {
     result <- rbind(alg_del(word[i]),alg_ins(word[i]),alg_rev(word[i]),alg_subs(word[i]))
-    words <- result[,1]
-    scores <- as.numeric(result[,2])
+    colnames(result)<- c("word","score")
     for (i in 1:4){
-      if (scores[i] == max(scores)){
-        return(words[i])
+      if (result[i,2]==max(result[,2])){
+        return(result[i,1])
       }
     }
   }
 }
+
+#cor_word <- function(word){
+#  for (i in 1:length(word)) {
+#    result <- rbind(alg_del(word[i]),alg_ins(word[i]),alg_rev(word[i]),alg_subs(word[i]))
+#    words <- result[,1]
+#    scores <- as.numeric(result[,2])
+#    for (i in 1:4){
+#      if (scores[i] == max(scores)){
+#        return(words[i])
+#      }
+#    }
+#  }
+#}
 
 data_frame$correct_word_groundtruth <- NA
 correct <- function(x,y){
