@@ -22,7 +22,7 @@ Term: Fall 2018
 
 + Anke Xu:
 + Binglun Zhao: Word list tokenize;Features extraction;Construct labels of words in tesseract outputs 
-+ Huiyu Zhang:
++ Huiyu Zhang: Generate Confusion Matrices; Construct main.Rmd; Project presentation
 + Jiansong Chen:
 + Sen Fu: Classify Data; Train and Tune SVM model; Prepare SVM output for Correction
 
