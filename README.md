@@ -19,10 +19,10 @@ Term: Fall 2018
 **Contribution statement**: All team members contributed equally in all stages of this project. All team members approve our work presented in this GitHub repository including this contributions statement. 
 
 + Anke Xu:
-+ Binglun Zhao:
++ Binglun Zhao: Word list tokenize;Features extraction;Construct labels of words in tesseract outputs 
 + Huiyu Zhang:
 + Jiansong Chen:
-+ Sen Fu:
++ Sen Fu: Classify Data;Check SVM Algo Parameters by using 10-fold cross validation;SVM model training
 
 Following [suggestions](http://nicercode.github.io/blog/2013-04-05-projects/) by [RICH FITZJOHN](http://nicercode.github.io/about/#Team) (@richfitz). This folder is orgarnized as follows.
 
