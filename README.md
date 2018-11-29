@@ -2,7 +2,7 @@
 
 ![image](figs/intro.png)
 
-![image](figs/Screen Shot 2018-11-28 at 10.39.52 PM.png)
+![image](figs/PerformancePic.png)
 
 ### [Full Project Description](doc/project4_desc.md)
 
