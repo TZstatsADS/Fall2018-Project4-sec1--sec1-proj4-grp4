@@ -20,10 +20,10 @@ Term: Fall 2018
 	
 **Contribution statement**: All team members contributed equally in all stages of this project. All team members approve our work presented in this GitHub repository including this contributions statement. 
 
-+ Anke Xu:
++ Anke Xu: Text Alignment; Generate Confusion Matrices and corpus; Construct main.Rmd; Condcuct performance measure
 + Binglun Zhao: Word list tokenize;Features extraction;Construct labels of words in tesseract outputs 
-+ Huiyu Zhang: Generate Confusion Matrices; Construct main.Rmd; Project presentation
-+ Jiansong Chen:
++ Huiyu Zhang: Generate Confusion Matrices and corpus; Construct main.Rmd; Project presentation
++ Jiansong Chen: Create functions for calculating Bayesian Probability and return the words
 + Sen Fu: Classify Data; Train and Tune SVM model; Prepare SVM output for Correction
 
 Following [suggestions](http://nicercode.github.io/blog/2013-04-05-projects/) by [RICH FITZJOHN](http://nicercode.github.io/about/#Team) (@richfitz). This folder is orgarnized as follows.
